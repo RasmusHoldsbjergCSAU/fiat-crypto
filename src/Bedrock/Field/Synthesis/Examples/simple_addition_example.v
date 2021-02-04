@@ -1,142 +1,205 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Strings.String.
-Require Import Crypto.Bedrock.Field.Synthesis.Generic.WordByWordMontgomery.
-Require Import Crypto.Bedrock.Field.Synthesis.Specialized.WordByWordMontgomery.
+Require Import Coq.Lists.List.
+Require Import bedrock2.Array.
+Require Import bedrock2.ProgramLogic.
+Require Import bedrock2.Syntax.
+Require Import bedrock2.Map.Separation.
+Require Import bedrock2.Map.SeparationLogic.
+Require Import coqutil.Word.Interface.
+Require Import coqutil.Tactics.Tactics.
+Require Import Crypto.Spec.MxDH.
+Require Import Crypto.Arithmetic.Core.
+Require Import Crypto.Bedrock.Field.Translation.Parameters.Defaults.
+Require Import Crypto.Bedrock.Field.Common.Tactics.
+Require Import Crypto.Bedrock.Field.Common.Types.
+Require Import Crypto.Bedrock.Field.Synthesis.Generic.Bignum.
+Require Import Crypto.Bedrock.Field.Synthesis.Generic.Operation.
+Require Import Crypto.Bedrock.Field.Synthesis.Generic.UnsaturatedSolinas.
+Require Import Crypto.Bedrock.Field.Translation.Parameters.SelectParameters.
+Require Import Crypto.Bedrock.Field.Synthesis.Specialized.Tactics.
+Require Import Crypto.Bedrock.Field.Synthesis.Specialized.UnsaturatedSolinas.
+Require Import Crypto.Bedrock.Field.Synthesis.Examples.X25519_64.
+Require Import Crypto.COperationSpecifications.
+Require Import Crypto.UnsaturatedSolinasHeuristics.
+Require Import Crypto.Util.ZUtil.Tactics.PullPush.Modulo.
+Require Import bedrock2.Semantics.
+Import ListNotations.
+Import Syntax.Coercions.
 Local Open Scope Z_scope.
 
-Local Definition m := 2^256 - 2^224 + 2^192 + 2^96 - 1.
-Local Definition machine_wordsize := 64.
-Local Definition prefix := "p256_"%string. (* placed before function names *)
+Require Import Crypto.Spec.ModularArithmetic.
+Definition F := F (2^255 - 19).
+Definition a24 : F := F.of_Z _ 121665.
 
-Instance names : names_of_operations.
-  make_names_of_operations prefix. Defined.
-
-Definition ops : wbwmontgomery_reified_ops m machine_wordsize.
-  make_reified_ops. Time Defined.
-
-Instance p256_bedrock2_funcs : bedrock2_wbwmontgomery_funcs.
-funcs_from_ops ops. Defined.
-
-Instance p256_bedrock2_specs : bedrock2_wbwmontgomery_specs.
-specs_from_ops ops m. Defined.
-
-Instance p256_bedrock2_correctness : bedrock2_wbwmontgomery_correctness.
-prove_correctness ops m machine_wordsize. Defined.
+(* Gallina specification *)
+Definition ladderstep_gallina
+           (X1 : F) (P1 P2 : F * F) : F * F * (F * F) :=
+  @MxDH.ladderstep F F.add F.sub F.mul a24 X1 P1 P2.
 
 
-Require Import bedrock2.NotationsCustomEntry.
-Require Import bedrock2.NotationsInConstr.
-Require Import bedrock2.Syntax.
-Local Open Scope bedrock_expr.
-Coercion expr.var : string >-> Syntax.expr.
+Existing Instances Defaults64.default_parameters
+         curve25519_bedrock2_funcs curve25519_bedrock2_specs
+         curve25519_bedrock2_correctness.
 
-
-Eval cbv [add p256_bedrock2_funcs] in add.
-Check add.
-Eval cbv [add p256_bedrock2_funcs] in add.
-About bedrock_func.
-Check bedrock_func.
-Eval cbv [spec_of_add p256_bedrock2_specs] in spec_of_add.
-About Bignum.
-
-Check add.
-Eval compute in add.
-
-Require Import Znat.
-
-Import Syntax BinInt String List.ListNotations.
+Local Notation n := X25519_64.n.
+Local Notation s := X25519_64.s.
+Local Notation c := X25519_64.c.
+Local Notation machine_wordsize := X25519_64.machine_wordsize.
+Local Notation M := (UnsaturatedSolinas.m s c).
+Local Notation weight :=
+  (ModOps.weight (QArith_base.Qnum
+                    (UnsaturatedSolinasHeuristics.limbwidth n s c))
+                 (Z.pos (QArith_base.Qden
+                           (UnsaturatedSolinasHeuristics.limbwidth n s c)))).
+Local Notation eval := (Positional.eval weight n).
+Local Notation loose_bounds := (UnsaturatedSolinasHeuristics.loose_bounds n s c).
+Local Notation tight_bounds := (UnsaturatedSolinasHeuristics.tight_bounds n s c).
 
 Local Open Scope string_scope.
-Local Open Scope Z_scope.
-Local Open Scope list_scope.
+Local Infix "*" := sep : sep_scope.
+Delimit Scope sep_scope with sep.
 
-Local Coercion literal (z : Z) : expr := expr.literal z.
-Local Coercion var (x : string) : Syntax.expr := Syntax.expr.var x.
-Local Coercion name_of_func (f : function) := fst f.
+(* need to define scalar-multiplication instance locally so typeclass inference
+   knows which instance to pick up (results in weird ecancel_assumption failures
+   otherwise) *)
+(* TODO: try Existing Instance again *)
 
-Definition addF : func :=
-  let px := "px" in
-  let py := "py" in
-  let pout := "pout" in
-  ("addF", ([px; py; pout], ([]:list String.string), bedrock_func_body:(
-                         add(pout, px, py)
-                         ))).
+Require Import bedrock2.NotationsCustomEntry.
 
+Definition ladderstep : Syntax.func :=
+  let X1 := "X1" in
+  let X2 := "X2" in
+  let X3 := "X3" in
+  (* intermediate variables *)
+  let A := "A" in
+  (* store results back in P1 (X2, Z2) and P2 (X3, Z3) *)
+  let Xout := "Xout" in
+  let mul := "curve25519_carry_mul" in
+  let add := "curve25519_add" in
+  ("ladderstep",
+   ([X1; X2; X3;
+       A; Xout], [],
+    bedrock_func_body:(
+      add (A, X1, X2) ;     (* llet A  := X2+Z2 in *)
+      mul (Xout, A, X3)
+  ))).
 
-From bedrock2 Require Import Semantics BasicC64Semantics WeakestPrecondition ProgramLogic.
-From coqutil Require Import Word.Properties Word.Interface Tactics.letexists.
+Instance spec_of_ladderstep : spec_of ladderstep :=
+  fun functions =>
+    forall (X1 X2 X3 A Xout : list Semantics.word)
+           (pX1 pX2 pX3
+                pA pout : Semantics.word)
+           t m (R : Interface.map.rep (map:=Semantics.mem) -> Prop),
+      (* inputs must be bounded by loose_bounds *)
+      let X1z := map word.unsigned X1 in
+      let X2z := map word.unsigned X2 in
+      let X3z := map word.unsigned X3 in
+      let Xoutz := map word.unsigned Xout in
+      list_Z_bounded_by tight_bounds X1z ->
+      list_Z_bounded_by tight_bounds X2z ->
+      list_Z_bounded_by tight_bounds X3z ->
+      (Bignum n pX1 X1
+       * Bignum n pX2 X2
+       * Bignum n pX3 X3
+       * Bignum n pA A
+       * Bignum n pout Xout)%sep m ->
+      WeakestPrecondition.call
+        functions ladderstep t m
+        [pX1; pX2; pX3; pA; pout]
+        (fun t' m' rets =>
+           t = t' /\
+           rets = []%list /\
+           exists X4
+                  : list Semantics.word,
+             let X4z := map word.unsigned X4 in
+             let toF := fun x => F.of_Z (2^255 - 19) (eval x) in
+             toF (Xoutz) = F.mul ( toF X3z ) (F.add (toF X1z) (toF X2z))
+             /\ list_Z_bounded_by tight_bounds X4z
+             /\ (Bignum n pX1 X1
+                 * Bignum n pX2 X2
+                 * Bignum n pA A
+                 * Bignum n pout X4)%sep m').
 
-About WordByWordMontgomery.WordByWordMontgomery.valid.
+Instance spec_of_curve25519_carry_mul :
+  spec_of "curve25519_carry_mul" := spec_of_carry_mul.
+Instance spec_of_curve25519_add :
+  spec_of "curve25519_add" := spec_of_add.
+Ltac prove_bounds :=
+  lazymatch goal with
+  | H : list_Z_bounded_by tight_bounds ?x
+    |- list_Z_bounded_by loose_bounds ?x =>
+    apply UnsaturatedSolinas.relax_correct; apply H
+  | H : list_Z_bounded_by ?b ?x |- list_Z_bounded_by ?b ?x =>
+    apply H
+  end.
+Ltac prove_length :=
+  match goal with
+  | |- length (map _ _) = _ => rewrite ?map_length; assumption
+  | |- length _ = X25519_64.n =>
+    apply bounded_by_loose_bounds_length
+      with (s:=X25519_64.s) (c:=X25519_64.c); prove_bounds
+  end.
+Ltac prove_preconditions :=
+  lazymatch goal with
+  | |- length _ = _ => prove_length
+  | |- list_Z_bounded_by _ _ => prove_bounds
+  end.
 
-Check cmd.
+(* tactics for solving the final arithmetic equivalence *)
+Ltac push_FtoZ :=
+  cbv [F.sub];
+  repeat first [ rewrite ModularArithmeticTheorems.F.to_Z_add
+               | rewrite ModularArithmeticTheorems.F.to_Z_mul
+               | rewrite ModularArithmeticTheorems.F.to_Z_opp
+               | rewrite ModularArithmeticTheorems.F.of_Z_to_Z
+               | rewrite ModularArithmeticTheorems.F.to_Z_of_Z
+               ].
+Ltac rewrite_field_postconditions :=
+  repeat lazymatch goal with
+         | H : eval (map word.unsigned ?x) mod M = _
+           |- context [map word.unsigned ?x] =>
+           autorewrite with push_Zmod in H;
+           rewrite H
+         end.
+Ltac solve_F_eq :=
+  apply ModularArithmeticTheorems.F.eq_of_Z_iff;
+  push_FtoZ; change (Z.pos (2^255 - 19)) with M; pull_Zmod;
+  let LHS := fresh "LHS" in
+  match goal with |- ?lhs = _ =>
+                  set (LHS := lhs) end;
+  rewrite_field_postconditions; pull_Zmod;
+  subst LHS; try reflexivity.
 
-Eval compute in Semantics.width.
+Ltac t := repeat straightline; handle_call; [ prove_preconditions .. | ].
 
-Instance spec_of_addF : spec_of "addF" := fun functions =>
-forall (wx wy : list Interface.word.rep)
-  (px py pout : Interface.word.rep)
-  (wold_out : list Interface.word.rep) (t : Semantics.trace)
-  (m0 : Interface.map.rep) (Rx Ry Rout : Interface.map.rep -> Prop),
-WordByWordMontgomery.WordByWordMontgomery.valid Semantics.width
-  (WordByWordMontgomery.n m Semantics.width) m
-  (List.map Interface.word.unsigned wx) /\
-WordByWordMontgomery.WordByWordMontgomery.valid Semantics.width
-  (WordByWordMontgomery.n m Semantics.width) m
-  (List.map Interface.word.unsigned wy) ->
-Separation.sep
-  (Bignum.Bignum (WordByWordMontgomery.n m Semantics.width) px wx) Rx
-  m0 ->
-Separation.sep
-  (Bignum.Bignum (WordByWordMontgomery.n m Semantics.width) py wy) Ry
-  m0 ->
-Separation.sep
-  (Bignum.Bignum (WordByWordMontgomery.n m Semantics.width) pout
-     wold_out) Rout m0 ->
-WeakestPrecondition.call functions "addF" t m0
-  (pout :: px :: py :: nil)
-  (fun (t' : Semantics.trace) (m' : Interface.map.rep)
-     (rets : list Interface.word.rep) =>
-   t = t' /\
-   rets = nil /\
-   (exists wout : list Interface.word.rep,
-      Separation.sep
-        (Separation.sep
-           (Separation.emp
-              (WordByWordMontgomery.WordByWordMontgomery.eval
-                 Semantics.width
-                 (WordByWordMontgomery.WordByWordMontgomery.from_montgomerymod
-                    Semantics.width
-                    (WordByWordMontgomery.n m Semantics.width) m
-                    (WordByWordMontgomery.m' m Semantics.width)
-                    (List.map Interface.word.unsigned wout)) mod m =
-               (WordByWordMontgomery.WordByWordMontgomery.eval
-                  Semantics.width
-                  (WordByWordMontgomery.WordByWordMontgomery.from_montgomerymod
-                     Semantics.width
-                     (WordByWordMontgomery.n m Semantics.width) m
-                     (WordByWordMontgomery.m' m Semantics.width)
-                     (List.map Interface.word.unsigned wx)) +
-                WordByWordMontgomery.WordByWordMontgomery.eval
-                  Semantics.width
-                  (WordByWordMontgomery.WordByWordMontgomery.from_montgomerymod
-                     Semantics.width
-                     (WordByWordMontgomery.n m Semantics.width) m
-                     (WordByWordMontgomery.m' m Semantics.width)
-                     (List.map Interface.word.unsigned wy))) mod m /\
-               WordByWordMontgomery.WordByWordMontgomery.valid
-                 Semantics.width
-                 (WordByWordMontgomery.n m Semantics.width) m
-                 (List.map Interface.word.unsigned wout)))
-           (Bignum.Bignum (WordByWordMontgomery.n m Semantics.width)
-              pout wout)) Rout m')).
+Lemma ladderstep_correct :
+  program_logic_goal_for_function! ladderstep.
+Proof.
+  straightline_init_with_change.
+  Time
+  repeat t.
 
-
-Definition sum5_twice : func :=
-  let ret := "ret" in
-  let s := "s" in
-  ("sum5_twice", ([], ([ret]:list String.string), bedrock_func_body:(
-                         ret = 0;
-                         unpack! s = sum5();
-                         ret = ret + s;
-                         ret = ret + s
-                         ))).
+  (* now prove postcondition *)
+  repeat split; try reflexivity.
+  repeat lazymatch goal with
+         | |- exists _, _ => eexists
+         | |- _ /\ _ => split
+  end. 
+  - repeat straightline. solve_F_eq.
+    Search ((_ mod _) * _ mod _). rewrite <- Z.mul_mod_idemp_l in H8; try eauto.
+      + rewrite H5 in H8. rewrite Z.mul_comm. rewrite Z.mul_mod_idemp_l in H8.
+        * rewrite <- H8. subst x0.
+      subst x0.
+  
+    lazymatch goal with
+    | |- sep _ _ _ => clear_old_seps; ecancel_assumption
+    | _ => idtac
+    end.
+  all: try prove_bounds.
+  cbv [ladderstep_gallina MxDH.ladderstep].
+  repeat match goal with
+           |- (_ , _) = (_ , _) => apply f_equal2
+         end.
+  all:solve_F_eq.
+Qed.
