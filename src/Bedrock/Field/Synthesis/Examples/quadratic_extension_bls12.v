@@ -358,6 +358,7 @@ Proof.
     handle_call; [eauto ..|].
     (*Second function call*)
     handle_call; [eauto .. |].
+    (*remaining function calls*)
     handle_call; [eauto .. |].
     handle_call; [eauto .. |].
     handle_call; [eauto .. |].
@@ -369,7 +370,7 @@ Proof.
     (*Prove postcondition*)
     repeat split; auto. do 3 eexists.
     split.
-    2: { clear_old_seps. ecancel_assumption. }
+    2: {  ecancel_assumption. }
     split.
       2: {split; eauto. }
     split.
