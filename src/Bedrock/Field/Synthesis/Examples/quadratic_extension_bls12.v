@@ -156,10 +156,19 @@ Ltac handle_bignum_preconditions :=
 Ltac handle_preconditions :=
     try handle_bignum_preconditions; eauto.
 
+Local Notation evfst x := (eval (from_mont (fst x))).
+Local Notation evsnd x := (eval (from_mont (snd x))).
+
+
 Definition Fp2_add_Gallina_spec in1 in2 out :=
     valid (fst out) /\ valid (snd out) /\
-    (eval ( from_mont (fst out))) = ((eval ( from_mont (fst in1))) + (eval (from_mont (fst in2)))) mod m /\
-    (eval (from_mont (snd out))) = ((eval (from_mont (snd in1))) + (eval (from_mont (snd in2)))) mod m.
+    evfst out = (evfst in1 + evfst in2) mod m /\
+    evsnd out = (evsnd in1 + evsnd in2) mod m.
+
+Definition Fp2_mul_Gallina_spec in1 in2 out :=
+    valid (fst out) /\ valid (snd out) /\
+    evfst out = (evfst in1 * evfst in2 - evsnd in1 * evsnd in2) mod m /\
+    evsnd out = (evfst in1 * evsnd in2 + evfst in1 * evsnd in2) mod m.
 
   Definition Fp2_add : Syntax.func :=
   let outr := "outr" in
@@ -177,6 +186,32 @@ Definition Fp2_add_Gallina_spec in1 in2 out :=
     )
   )).
 
+  Definition Fp2_mul : Syntax.func :=
+    let outr := "outr" in
+    let outi := "outi" in
+    let xr := "xr" in
+    let xi := "xi" in
+    let yr := "yr" in
+    let yi := "yi" in
+    let v0 := "v0" in
+    let v1 := "v1" in
+    let v2 := "v2" in
+    let add := (append prefix "add") in
+    let mul := (append prefix "mul") in
+    let sub := (append prefix "sub") in  
+    ("Fp2_mul", (
+      [outr; outi; xr; xi; yr; yi; v0; v1; v2], [],
+      bedrock_func_body:(
+      mul (v0, xr, yr);
+      mul (v1, xi, yi);
+      sub (outr, v0, v1);
+      add (v2, xr, xi);
+      add (outi, yr, yi);
+      mul (outi, v2, outi);
+      sub (outi, outi, v0);
+      sub (outi, outi, v1)
+      )
+    )).
 
 
   Local Open Scope string_scope.
@@ -213,7 +248,42 @@ fun functions : list (string * (list string * list string * cmd)) =>
                 valid (List.map Interface.word.unsigned wouti)) /\
              ((Bignum n poutr woutr) * (Bignum n pouti wouti) * Rout)%sep m'))).
 
-                
+
+Instance spec_of_my_mul: spec_of Fp2_mul :=
+fun functions : list (string * (list string * list string * cmd)) =>
+    forall (wxr wxi wyr wyi : list Interface.word.rep)
+    (pxr pxi pyr pyi pv0 pv1 pv2 poutr pouti : Interface.word.rep)
+    (wold_outr wold_outi wold_v0 wold_v1 wold_v2 : list Interface.word.rep) (t : Semantics.trace)
+    (m0 : Interface.map.rep) (Rxr Rxi Ryr Ryi Rout : Interface.map.rep -> Prop),
+    valid (List.map Interface.word.unsigned wxr) /\
+    valid (List.map Interface.word.unsigned wxi) /\
+    valid (List.map Interface.word.unsigned wyr) /\
+    valid (List.map Interface.word.unsigned wyi) ->
+    (((Bignum n pxr wxr) ) *
+    ((Bignum n pxi wxi) ) *
+    ((Bignum n pyr wyr) ) *
+    ((Bignum n pyi wyi) ) *
+    ((Bignum n pv0 wold_v0) ) *
+    ((Bignum n pv1 wold_v1) ) *
+    ((Bignum n pv2 wold_v2) ) *
+    (Bignum n poutr wold_outr) * (Bignum n pouti wold_outi))%sep m0 ->
+    WeakestPrecondition.call functions ( "Fp2_mul") t m0
+    ([pouti; poutr; pxi; pxr; pyi; pyr; pv0; pv1; pv2])
+    (fun (t' : Semantics.trace) (m' : Interface.map.rep)
+        (rets : list Interface.word.rep) =>
+    t = t' /\
+    rets = nil /\
+    (exists (woutr wouti : list Interface.word.rep) Rout,
+        (
+                (Fp2_mul_Gallina_spec (List.map Interface.word.unsigned wxr, List.map Interface.word.unsigned wxi)
+                (List.map Interface.word.unsigned wyr, List.map Interface.word.unsigned wyi)
+                (List.map Interface.word.unsigned woutr, List.map Interface.word.unsigned wouti) /\
+                valid (List.map Interface.word.unsigned woutr) /\
+                valid (List.map Interface.word.unsigned wouti)) /\
+             ((Bignum n poutr woutr) * (Bignum n pouti wouti) * Rout)%sep m'))).
+
+             
+
 
 Require Import Crypto.Bedrock.Field.Synthesis.Specialized.Tactics.
 Require Import bedrock2.string2ident.
@@ -235,6 +305,66 @@ Proof.
     handle_call; [eauto ..|].
     (*Second function call*)
     handle_call; [eauto .. |].
+
+    (*Prove postcondition*)
+    repeat split; auto. do 3 eexists.
+    split.
+    2: { clear_old_seps. ecancel_assumption. }
+    split.
+      2: {split; eauto. }
+    split. About sep.
+      - eauto.
+      - split; [eauto|]. split.
+        + unfold eval. unfold from_mont. unfold m'.
+          assert (bw = width) by reflexivity.
+          rewrite <- H12. rewrite Z.add_comm.
+          rewrite Prod.fst_pair.
+          rewrite Prod.fst_pair.
+          rewrite Prod.fst_pair.
+          rewrite <- H9. rewrite Z.mod_small.
+            * reflexivity.
+            * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H11.
+              {
+                destruct H11. destruct H13. apply H14.
+              }
+              all: try reflexivity. simpl.
+               cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
+               auto. auto with zarith.
+        + unfold eval. unfold from_mont. unfold m'.
+        assert (bw = width) by reflexivity.
+        rewrite <- H12. rewrite Z.add_comm.
+        rewrite Prod.snd_pair.
+        rewrite Prod.snd_pair.
+        rewrite Prod.snd_pair.
+        rewrite <- H6. rewrite Z.mod_small.
+          * reflexivity.
+          * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H8.
+            {
+              destruct H8. destruct H13. apply H14.
+            }
+            all: try reflexivity. simpl.
+             cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
+             auto. auto with zarith.
+Qed.
+
+
+Theorem Fp2_mul_ok: program_logic_goal_for_function! Fp2_mul.
+Proof.
+    (*Initializing*)
+    straightline_init_with_change. 
+    repeat straightline.
+
+    (*first function call*)
+    handle_call; [eauto ..|].
+    (*Second function call*)
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    handle_call; [eauto .. |].
+    
 
     (*Prove postcondition*)
     repeat split; auto. do 3 eexists.
