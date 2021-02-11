@@ -1,5 +1,6 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Strings.String.
+Require Import Coq.micromega.Lia.
 Require Import Crypto.Bedrock.Field.Common.Types.
 Require Import Crypto.Bedrock.Field.Synthesis.Generic.WordByWordMontgomery.
 Require Import Crypto.Bedrock.Field.Synthesis.Specialized.WordByWordMontgomery. 
@@ -134,12 +135,12 @@ Local Open Scope Z_scope.
 (*Instantiation done.*)
 
 (*Initializing parameters; do not touch*)
-Local Notation bw := (@width (@semantics Defaults64.default_parameters)).
-Local Definition m' := @WordByWordMontgomery.m' m Semantics.width.
+Local Notation bw := (@width (semantics)).
+Local Notation m' := (@WordByWordMontgomery.m' m bw).
 Notation n := (WordByWordMontgomery.n m bw).
-Local Definition eval := @WordByWordMontgomery.eval bw n.
-Local Definition valid := @WordByWordMontgomery.valid bw n m.
-Local Definition from_mont := @WordByWordMontgomery.from_montgomerymod bw n m m'.
+Local Notation eval := (@WordByWordMontgomery.eval bw n).
+Local Notation valid := (@WordByWordMontgomery.valid bw n m).
+Local Notation from_mont := (@WordByWordMontgomery.from_montgomerymod bw n m m').
 Local Definition valid_words w := valid (List.map Interface.word.unsigned w).
 Local Definition map_words := List.map Interface.word.unsigned.
 Local Notation r := (WordByWordMontgomery.r bw).
@@ -168,7 +169,7 @@ Definition Fp2_add_Gallina_spec in1 in2 out :=
 Definition Fp2_mul_Gallina_spec in1 in2 out :=
     valid (fst out) /\ valid (snd out) /\
     evfst out = (evfst in1 * evfst in2 - evsnd in1 * evsnd in2) mod m /\
-    evsnd out = (evfst in1 * evsnd in2 + evfst in1 * evsnd in2) mod m.
+    evsnd out = (evfst in1 * evsnd in2 + evfst in2 * evsnd in1) mod m.
 
   Definition Fp2_add : Syntax.func :=
   let outr := "outr" in
@@ -204,7 +205,7 @@ Definition Fp2_mul_Gallina_spec in1 in2 out :=
       bedrock_func_body:(
       mul (v0, xr, yr);
       mul (v1, xi, yi);
-      sub (outr, v0, v1);
+      sub (outr, v1, v0);
       add (v2, xr, xi);
       add (outi, yr, yi);
       mul (outi, v2, outi);
@@ -268,7 +269,7 @@ fun functions : list (string * (list string * list string * cmd)) =>
     ((Bignum n pv2 wold_v2) ) *
     (Bignum n poutr wold_outr) * (Bignum n pouti wold_outi))%sep m0 ->
     WeakestPrecondition.call functions ( "Fp2_mul") t m0
-    ([pouti; poutr; pxi; pxr; pyi; pyr; pv0; pv1; pv2])
+    ([poutr; pouti; pxi; pxr; pyi; pyr; pv0; pv1; pv2])
     (fun (t' : Semantics.trace) (m' : Interface.map.rep)
         (rets : list Interface.word.rep) =>
     t = t' /\
@@ -315,9 +316,7 @@ Proof.
     split. About sep.
       - eauto.
       - split; [eauto|]. split.
-        + unfold eval. unfold from_mont. unfold m'.
-          assert (bw = width) by reflexivity.
-          rewrite <- H12. rewrite Z.add_comm.
+        + rewrite Z.add_comm.
           rewrite Prod.fst_pair.
           rewrite Prod.fst_pair.
           rewrite Prod.fst_pair.
@@ -325,27 +324,36 @@ Proof.
             * reflexivity.
             * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H11.
               {
-                destruct H11. destruct H13. apply H14.
+                destruct H11. destruct H12. apply H13.
               }
               all: try reflexivity. simpl.
-               cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
-               auto. auto with zarith.
-        + unfold eval. unfold from_mont. unfold m'.
-        assert (bw = width) by reflexivity.
-        rewrite <- H12. rewrite Z.add_comm.
-        rewrite Prod.snd_pair.
-        rewrite Prod.snd_pair.
-        rewrite Prod.snd_pair.
-        rewrite <- H6. rewrite Z.mod_small.
+               cbv [m]. cbv [WordByWordMontgomery.n]. simpl. auto with zarith.
+        + rewrite Z.add_comm.
+          rewrite Prod.snd_pair.
+          rewrite Prod.snd_pair.
+          rewrite Prod.snd_pair.
+          rewrite <- H6. rewrite Z.mod_small.
           * reflexivity.
           * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H8.
             {
-              destruct H8. destruct H13. apply H14.
+              destruct H8. destruct H12. apply H13.
             }
             all: try reflexivity. simpl.
-             cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
-             auto. auto with zarith.
+            cbv [m]. cbv [WordByWordMontgomery.n]. simpl. auto with zarith.
 Qed.
+
+Lemma valid_mod {x : list Z} : valid x -> eval (from_mont x) mod m =eval (from_mont x).
+Proof.
+  intros. assert (valid (from_mont x)).
+    - pose proof (WordByWordMontgomery.from_montgomerymod_correct bw n m r' m').
+      apply (H0).
+      all: (auto; simpl; try lia).
+        + unfold m. lia.
+        + unfold m. cbv [WordByWordMontgomery.n]. simpl. lia.
+        + unfold m. lia.
+    - destruct H0. rewrite Z.mod_small; try reflexivity. unfold eval. auto.
+Qed.
+
 
 
 Theorem Fp2_mul_ok: program_logic_goal_for_function! Fp2_mul.
@@ -365,7 +373,6 @@ Proof.
     handle_call; [eauto .. |].
     handle_call; [eauto .. |].
     handle_call; [eauto .. |].
-    
 
     (*Prove postcondition*)
     repeat split; auto. do 3 eexists.
@@ -376,34 +383,36 @@ Proof.
     split.
       - eauto.
       - split; [eauto|]. split.
-        + unfold eval. unfold from_mont. unfold m'.
-          assert (bw = width) by reflexivity.
-          rewrite <- H12. rewrite Z.add_comm.
-          rewrite Prod.fst_pair.
-          rewrite Prod.fst_pair.
-          rewrite Prod.fst_pair.
-          rewrite <- H9. rewrite Z.mod_small.
-            * reflexivity.
-            * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H11.
-              {
-                destruct H11. destruct H13. apply H14.
-              }
-              all: try reflexivity. simpl.
-               cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
-               auto. auto with zarith.
-        + unfold eval. unfold from_mont. unfold m'.
-        assert (bw = width) by reflexivity.
-        rewrite <- H12. rewrite Z.add_comm.
-        rewrite Prod.snd_pair.
-        rewrite Prod.snd_pair.
-        rewrite Prod.snd_pair.
-        rewrite <- H6. rewrite Z.mod_small.
-          * reflexivity.
-          * apply WordByWordMontgomery.from_montgomerymod_correct with (r' := r') (m' := m') in H8.
-            {
-              destruct H8. destruct H13. apply H14.
-            }
-            all: try reflexivity. simpl.
-             cbv [m]. cbv [WordByWordMontgomery.n]. simpl.
-             auto. auto with zarith.
+        + do 3 rewrite Prod.fst_pair. do 2 rewrite Prod.snd_pair.
+          remember (eval (from_mont (map word.unsigned wxi))) as xi.
+          remember (eval (from_mont (map word.unsigned wxr))) as xr.
+          remember (eval (from_mont (map word.unsigned wyi))) as yi.
+          remember (eval (from_mont (map word.unsigned wyr))) as yr.
+          rewrite (valid_mod H17) in H14. rewrite H14.
+          rewrite (valid_mod H15) in H12. rewrite H12.
+          rewrite (valid_mod H13) in H8. rewrite H8.
+          rewrite <- Zminus_mod. apply (f_equal (fun y => y mod m)). ring.
+        + { do 3 rewrite Prod.snd_pair. do 2 rewrite Prod.fst_pair.
+          rewrite (valid_mod H29) in H27. rewrite H27.
+          rewrite (valid_mod H26) in H24. rewrite H24.
+          rewrite (valid_mod H23) in H20. rewrite H20.
+          rewrite (valid_mod H21) in H18. rewrite H18.
+          rewrite (valid_mod H19) in H16. rewrite H16.
+          rewrite (valid_mod H17) in H14.
+          rewrite (valid_mod H15) in H12. rewrite H12.
+          rewrite (valid_mod H13) in H8. rewrite H8.  
+          remember (eval (from_mont (map word.unsigned wxi))) as xi.
+          remember (eval (from_mont (map word.unsigned wxr))) as xr.
+          remember (eval (from_mont (map word.unsigned wyi))) as yi.
+          remember (eval (from_mont (map word.unsigned wyr))) as yr.
+          rewrite <- Z.mul_mod; [| unfold m; lia].
+          rewrite <- (Zminus_mod _ (xi * yi)).
+          rewrite <- Zminus_mod. apply (f_equal (fun y => (y mod m))). ring. }
 Qed.
+
+(*Printing to C*)
+(* From bedrock2 Require Import ToCString Bytedump.
+Definition bls12_c_module :=
+  c_module (Fp2_mul :: nil).
+Redirect "bls12_Fp2_mul.c" Eval compute in bls12_c_module. *)
+
