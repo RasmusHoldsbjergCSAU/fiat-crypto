@@ -15,13 +15,13 @@ Require Crypto.Bedrock.Field.Translation.Parameters.Defaults64.
 Local Open Scope string_scope.
 Import ListNotations.
 Require Import bedrock2.NotationsCustomEntry.
-Require Import bedrock2.NotationsInConstr.
+(* Require Import bedrock2.NotationsInConstr. *)
 Require Import bedrock2.Syntax.
-Local Open Scope bedrock_expr.
+(* Local Open Scope bedrock_expr. *)
 Require Crypto.Bedrock.Field.Translation.Parameters.Defaults32.
 Require Crypto.Bedrock.Field.Translation.Parameters.Defaults64.
 Require Import Coq.ZArith.ZArith.
-Require Import bedrock2.NotationsInConstr.
+(* Require Import bedrock2.NotationsInConstr. *)
 Require Import bedrock2.Syntax.
 Require Import Coq.Lists.List.
 Require Import bedrock2.Array.
@@ -187,6 +187,7 @@ Definition Fp2_mul_Gallina_spec in1 in2 out :=
     )
   )).
 
+  Check (expr.literal 0).
   Definition Fp2_mul : Syntax.func :=
     let outr := "outr" in
     let outi := "outi" in
@@ -201,19 +202,24 @@ Definition Fp2_mul_Gallina_spec in1 in2 out :=
     let mul := (append prefix "mul") in
     let sub := (append prefix "sub") in  
     ("Fp2_mul", (
-      [outr; outi; xr; xi; yr; yi; v0; v1; v2], [],
+      [outr; outi; xr; xi; yr; yi], [],
       bedrock_func_body:(
-      mul (v0, xr, yr);
-      mul (v1, xi, yi);
-      sub (outr, v1, v0);
-      add (v2, xr, xi);
-      add (outi, yr, yi);
-      mul (outi, v2, outi);
-      sub (outi, outi, v0);
-      sub (outi, outi, v1)
+      stackalloc 48 as v0 {
+        stackalloc 48 as v1 {
+          stackalloc 48 as v2 {
+            mul (v0, xr, yr);
+            mul (v1, xi, yi);
+            sub (outr, v1, v0);
+            add (v2, xr, xi);
+            add (outi, yr, yi);
+            mul (outi, v2, outi);
+            sub (outi, outi, v0);
+            sub (outi, outi, v1)
+          }
+        }
+      }
       )
     )).
-
 
   Local Open Scope string_scope.
   Local Infix "*" := sep : sep_scope.
@@ -264,12 +270,9 @@ fun functions : list (string * (list string * list string * cmd)) =>
     ((Bignum n pxi wxi) ) *
     ((Bignum n pyr wyr) ) *
     ((Bignum n pyi wyi) ) *
-    ((Bignum n pv0 wold_v0) ) *
-    ((Bignum n pv1 wold_v1) ) *
-    ((Bignum n pv2 wold_v2) ) *
     (Bignum n poutr wold_outr) * (Bignum n pouti wold_outi))%sep m0 ->
     WeakestPrecondition.call functions ( "Fp2_mul") t m0
-    ([poutr; pouti; pxi; pxr; pyi; pyr; pv0; pv1; pv2])
+    ([poutr; pouti; pxi; pxr; pyi; pyr])
     (fun (t' : Semantics.trace) (m' : Interface.map.rep)
         (rets : list Interface.word.rep) =>
     t = t' /\
@@ -354,12 +357,322 @@ Proof.
     - destruct H0. rewrite Z.mod_small; try reflexivity. unfold eval. auto.
 Qed.
 
+Check Interface.map.split.
+Notation msplit := Interface.map.split.
+
+Lemma split_split_split : forall (m m1 m2 x0 x1 : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters))), msplit m m1 m2 -> msplit m1 x0 x1
+  -> msplit m (Interface.map.putmany m2 x1) x0.
+Proof.
+  intros. split.
+    - pose proof Properties.map.putmany_assoc.
+      destruct H. destruct H0. rewrite H. rewrite H0. rewrite (Properties.map.putmany_comm x0 x1); auto.
+      rewrite (Properties.map.putmany_comm).
+
+      + rewrite Properties.map.putmany_assoc; auto.
+        * rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
+          rewrite H0. rewrite Properties.map.putmany_comm; auto.
+          apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+        * apply Properties.map.disjoint_comm. auto.
+        * rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
+          rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+      + rewrite Properties.map.putmany_comm.
+        * rewrite <- H0; auto.
+        * rewrite Properties.map.disjoint_comm. auto.
+  - destruct H, H0. apply Properties.map.disjoint_putmany_l. split.
+    + rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
+      rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+    + apply Properties.map.disjoint_comm; auto.
+Qed.
+
+ Definition R_putmany (m1 m2 m : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+ Init.Byte.byte (@mem (@semantics Defaults64.default_parameters))) := m = Interface.map.putmany m1 m2.
+    
+Lemma alloc_seps (m m1 m2 : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters)))
+ P : Interface.map.split m m1 m2 -> (exists R, (P * R)%sep m1) ->
+  exists (R' : Interface.map.rep -> Prop), (P * R')%sep m.
+Proof.
+  intros. destruct H0. destruct H0. destruct H0. destruct H0. destruct H1.
+   exists (R_putmany x1 m2). unfold sep. exists x0. exists (Interface.map.putmany x1 m2).
+    split.
+      - rewrite Properties.map.split_comm. rewrite Properties.map.putmany_comm.
+        + apply (split_split_split m m1 m2 x0 x1 H H0).
+        + destruct H. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
+          destruct H0. rewrite H0. rewrite Properties.map.putmany_comm.
+          * apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          * auto.
+      - split; auto. unfold R_putmany. auto.
+Qed.
+
+Local Infix " a +m b" := (Interface.map.putmany a b) (at level 11).
+
+Lemma split_distr m m1 m2 x x0 x1 x2 : msplit m m1 m2 -> msplit m1 x x0 -> msplit m2 x1 x2
+  -> msplit m (Interface.map.putmany x x1) (Interface.map.putmany x0 x2).
+Proof.
+  intros. destruct H. destruct H0. destruct H1. unfold msplit.
+  
+  
+  split.
+    - rewrite H. rewrite H0. rewrite H1. rewrite Properties.map.putmany_assoc; auto.
+      + rewrite Properties.map.putmany_assoc; auto.
+        * rewrite (Properties.map.putmany_comm _ x1).
+        { rewrite Properties.map.putmany_assoc.
+          - rewrite (Properties.map.putmany_comm x1); auto. pose proof Properties.map.sub_domain_disjoint.
+             apply H5 with (m1' := m2).
+              + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+                rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+              + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          - pose proof Properties.map.sub_domain_disjoint.
+          apply H5 with (m1' := m2).
+           + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+             rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+           + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          - auto.
+          - pose proof Properties.map.sub_domain_disjoint.
+            apply H5 with (m1' := m2).
+            + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+              rewrite H0. rewrite Properties.map.putmany_comm; auto. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+            + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+        }
+        rewrite <- H0. rewrite Properties.map.disjoint_comm.
+        pose proof Properties.map.sub_domain_disjoint.
+        apply H5 with (m1' := m2).
+        {
+          apply Properties.map.disjoint_comm. auto.
+        }
+        rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+        * apply Properties.map.disjoint_putmany_l; split; auto.
+          pose proof Properties.map.sub_domain_disjoint.
+          rewrite Properties.map.disjoint_comm. apply H5 with ( m1' := m1).
+          {
+            rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+              - rewrite Properties.map.disjoint_comm. auto.
+              - rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          }
+          rewrite H0. rewrite Properties.map.putmany_comm.
+          {
+            apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          }
+          auto.
+        * pose proof Properties.map.sub_domain_disjoint. apply H5 with ( m1' := m1).
+        {
+          rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+            - rewrite Properties.map.disjoint_comm. auto.
+            - rewrite H1. rewrite Properties.map.putmany_comm.
+              + apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+              + auto.
+        }
+        rewrite H0. rewrite Properties.map.putmany_comm.
+        {
+          apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+        }
+        auto.
+        * apply Properties.map.disjoint_putmany_l; split; auto.
+        pose proof Properties.map.sub_domain_disjoint.
+        apply H5 with ( m1' := m1).
+        {
+          rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+            - rewrite Properties.map.disjoint_comm. auto.
+            - rewrite H1. rewrite Properties.map.putmany_comm.
+              + apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+              + auto.
+        }
+        rewrite H0.
+        {
+          apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+        }
+    + rewrite <- H0. rewrite Properties.map.disjoint_comm.
+      pose proof Properties.map.sub_domain_disjoint. apply H5 with (m1' := m2).
+      * rewrite Properties.map.disjoint_comm. auto.
+      * rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+    +  rewrite <- H0. rewrite Properties.map.disjoint_comm.
+    pose proof Properties.map.sub_domain_disjoint. apply H5 with (m1' := m2).
+    * rewrite Properties.map.disjoint_comm. auto.
+    * rewrite H1. rewrite Properties.map.putmany_comm; auto. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+  - rewrite Properties.map.
+        
+
+(* Lemma alloc_seps_alt (m1 m2 m : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+    Init.Byte.byte (@mem (@semantics Defaults64.default_parameters)))
+    P1 R1 P2 R2 : Interface.map.split m m1 m2 ->
+      (P1 * R1)%sep m1 -> (P2 * R2)%sep m2 ->
+        exists (R' : Interface.map.rep -> Prop), (P1 * P2 * R')%sep m.
+Proof.
+  intros. destruct H0. destruct H0. destruct H0. destruct H2.
+          destruct H1. destruct H1. destruct H1. destruct H4.
+          eexists. unfold sep. exists (Interface.map.putmany x x1).
+          exists (Interface.map.putmany x0 x2). split.
+            - pose proof (split_split_split m m1 x (Interface.map.putmany x0 x2) x1).
+          
+          exists m1. exists m2. split; auto. *)
 
 
+
+Require Import WordByWordMontgomery.
+Require Import coqutil.Map.Properties.
+
+Lemma anybytes_Bignum: forall m a, anybytes a (Z.of_nat n * 8) m -> exists wa, (Bignum n a wa) m.
+Proof.
+  intros. About anybytes. destruct H.
+  pose proof (Bignum_of_bytes 6 a x). assert (length x =  (6 * (Z.to_nat word_size_in_bytes))%nat).
+    {
+      simpl. simpl in H. Check ftprint. pose proof (map.of_disjoint_list_zip_length (ftprint a 48) x m).
+      simpl in H1. rewrite H1; auto.
+    }
+  apply H0 in H1. unfold impl1 in H1. unfold ex1 in H1.
+  pose proof (of_disjoint_list_zip_to_array_1 (n * 8) a x m). apply H2 in H.
+  assert (n = 6)%nat by auto. rewrite H3. apply H1. auto.
+Qed.
+
+Require Import coqutil.Tactics.letexists.
 Theorem Fp2_mul_ok: program_logic_goal_for_function! Fp2_mul.
 Proof.
+  straightline. straightline. straightline.
+  straightline. straightline. straightline. straightline. straightline. straightline.
+  straightline. straightline. straightline. straightline. straightline. straightline. straightline.
+  straightline. straightline.
+  straightline. straightline. straightline. straightline. straightline.
+  About handle_call.
+          (*Bring into context array pointed to by pxi*)
+          pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pxi wxi) H17).
+          assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined0).
+            {
+              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pxi wxi) H15).
+              assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined).
+                {
+                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pxi wxi) H13).
+                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep m0).
+                    {
+                      exists (Bignum n pxr wxr * Bignum n pyr wyr *
+                      Bignum n pyi wyi * Bignum n poutr wold_outr * 
+                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
+                    }
+                  apply H20 in H21. auto.
+                }
+              apply H19 in H20. auto.
+            } apply H18 in H19. destruct H19.
+            
+            (*Bring into context array pointed to by a*)
+            apply anybytes_Bignum in H12. destruct H12.
+            pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n a x0) H17).
+            assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mCombined0).
+              { pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n a x0) H15).
+                assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mCombined).
+                  {
+                    apply map.split_comm in H13.
+                    pose proof (alloc_seps mCombined mStack m0 (Bignum n a x0) H13).
+                    assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mStack).
+                      {
+                         exists (emp True). sepsimpl; auto.
+                      }
+                    apply H22 in H23. auto.
+                  }
+                  apply H21 in H22; auto.
+              }
+              apply H20 in H21.
+              destruct H21.
+
+            (*Bring into context array pointed to by pyi*)
+            pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pyi wyi) H17).
+          assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep mCombined0).
+            {
+              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pyi wyi) H15).
+              assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep mCombined).
+                {
+                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pyi wyi) H13).
+                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep m0).
+                    {
+                      exists (Bignum n pxr wxr * Bignum n pxi wxi *
+                       Bignum n pyr wyr * Bignum n poutr wold_outr * 
+                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
+                    }
+                  apply H24 in H25. auto.
+                }
+              apply H23 in H24. auto.
+            } apply H22 in H23. destruct H23.
+
+            straightline_call.
+            2: { eauto. }
+            3: { eauto. }
+            2: { eauto. }
+            1: { auto. }
+            repeat straightline.
+            straightline_call.
+            2: {
+              sepsimpl_hyps. 
+            }
+
+  
+  
+  
+  straightline_call. all: sepsimpl.
+    3: {  repeat straightline. pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pxi wxi) H17).
+          assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined0).
+            {
+              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pxi wxi) H15).
+              assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined).
+                {
+                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pxi wxi) H13).
+                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep m0).
+                    {
+                      Check sep_assoc. exists (Bignum n pxr wxr * Bignum n pyr wyr *
+                      Bignum n pyi wyi * Bignum n poutr wold_outr * 
+                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
+                    }
+                  apply H20 in H21. auto.
+                }
+              apply H19 in H20. auto.
+            }
+          apply H18 in H19. destruct H19. 
+
+
+
+
+                      {
+                        repeat straightline. ecancel_assumption.
+                      } rewrite sep_assoc.
+                        {
+
+                        }
+                    }
+                }
+            }
+          apply H18 in H19. destruct H19. unify ?wx wxi.
+    
+    apply H18. rewrite sep_assoc in H8.
+    
+    
+    unshelve (instantiate (1:=_)).
+          - apply (R_putmany mCombined0 mStack1).
+    apply alloc_seps.
+    
+    
+    
+    unfold sep. exists mCombined0. exists mStack1. split; try auto. split.
+        - destruct H15. destruct H13. rewrite e0 in e. About Bignum. rewrite e. 
+          
+         
+     destruct H17. simpl in e. cbv [fold_right] in e. simpl in e. rewrite e.
+         dest
+    sepsimpl_hyps. ecancel_assumption. }.
+  handle_call.
+  
+  letexists.
+  split.
+    - straightline. repeat straightline. eexists.
+      + split.
+        * simpl. cbv [SortedList.lookup]. simpl.
+  
+  straightline. straightline. straightline. straightline.
+  straightline. straightline. straightline. straightline. straightline. straightline.
+    
+    
     (*Initializing*)
     straightline_init_with_change. 
+    repeat straightline. straightline. eexists. split.
+    - repeat straightline. eexists. split.
+       + simpl.
     repeat straightline.
 
     (*first function call*)
@@ -411,8 +724,16 @@ Proof.
 Qed.
 
 (*Printing to C*)
-(* From bedrock2 Require Import ToCString Bytedump.
-Definition bls12_c_module :=
+From bedrock2 Require Import ToCString Bytedump.
+Definition bls12_c_add :=
+  c_module (add :: nil).
+  Definition bls12_c_mul :=
+  c_module (mul :: nil).
+  Definition bls12_c_sub :=
+  c_module (sub :: nil).
+  Definition bls12_c_Fp2_add :=
+  c_module (Fp2_add :: nil).
+  Definition bls12_c_Fp2_mul :=
   c_module (Fp2_mul :: nil).
-Redirect "bls12_Fp2_mul.c" Eval compute in bls12_c_module. *)
+Eval compute in bls12_c_Fp2_add.
 
