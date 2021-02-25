@@ -209,7 +209,7 @@ Definition Fp2_mul_Gallina_spec in1 in2 out :=
           stackalloc 48 as v2 {
             mul (v0, xr, yr);
             mul (v1, xi, yi);
-            sub (outr, v1, v0);
+            sub (outr, v0, v1);
             add (v2, xr, xi);
             add (outi, yr, yi);
             mul (outi, v2, outi);
@@ -272,7 +272,7 @@ fun functions : list (string * (list string * list string * cmd)) =>
     ((Bignum n pyi wyi) ) *
     (Bignum n poutr wold_outr) * (Bignum n pouti wold_outi))%sep m0 ->
     WeakestPrecondition.call functions ( "Fp2_mul") t m0
-    ([poutr; pouti; pxi; pxr; pyi; pyr])
+    ([poutr; pouti; pxr; pxi; pyr; pyi])
     (fun (t' : Semantics.trace) (m' : Interface.map.rep)
         (rets : list Interface.word.rep) =>
     t = t' /\
@@ -407,46 +407,41 @@ Qed.
 
 Local Infix " a +m b" := (Interface.map.putmany a b) (at level 11).
 
-Lemma split_distr m m1 m2 x x0 x1 x2 : msplit m m1 m2 -> msplit m1 x x0 -> msplit m2 x1 x2
+Lemma split_distr (m m1 m2 : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters))) x x0 x1 x2 : msplit m m1 m2 -> msplit m1 x x0 -> msplit m2 x1 x2
   -> msplit m (Interface.map.putmany x x1) (Interface.map.putmany x0 x2).
 Proof.
   intros. destruct H. destruct H0. destruct H1. unfold msplit.
-  
-  
   split.
     - rewrite H. rewrite H0. rewrite H1. rewrite Properties.map.putmany_assoc; auto.
       + rewrite Properties.map.putmany_assoc; auto.
         * rewrite (Properties.map.putmany_comm _ x1).
         { rewrite Properties.map.putmany_assoc.
-          - rewrite (Properties.map.putmany_comm x1); auto. pose proof Properties.map.sub_domain_disjoint.
-             apply H5 with (m1' := m2).
-              + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+          - rewrite (Properties.map.putmany_comm x1); auto.
+             apply (Properties.map.sub_domain_disjoint x1 m2 x).
+              + rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
                 rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
               + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
-          - pose proof Properties.map.sub_domain_disjoint.
-          apply H5 with (m1' := m2).
-           + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+          - apply Properties.map.sub_domain_disjoint with (m1' := m2).
+           + rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
              rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
            + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
           - auto.
-          - pose proof Properties.map.sub_domain_disjoint.
-            apply H5 with (m1' := m2).
-            + rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m1); auto.
+          - apply Properties.map.sub_domain_disjoint with (m1' := m2).
+            + rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m1); auto.
               rewrite H0. rewrite Properties.map.putmany_comm; auto. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
             + rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
         }
         rewrite <- H0. rewrite Properties.map.disjoint_comm.
-        pose proof Properties.map.sub_domain_disjoint.
-        apply H5 with (m1' := m2).
+        apply Properties.map.sub_domain_disjoint with (m1' := m2).
         {
           apply Properties.map.disjoint_comm. auto.
         }
         rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
         * apply Properties.map.disjoint_putmany_l; split; auto.
-          pose proof Properties.map.sub_domain_disjoint.
-          rewrite Properties.map.disjoint_comm. apply H5 with ( m1' := m1).
+          rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with ( m1' := m1).
           {
-            rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+            rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
               - rewrite Properties.map.disjoint_comm. auto.
               - rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
           }
@@ -455,9 +450,9 @@ Proof.
             apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
           }
           auto.
-        * pose proof Properties.map.sub_domain_disjoint. apply H5 with ( m1' := m1).
+        * apply Properties.map.sub_domain_disjoint with ( m1' := m1).
         {
-          rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+          rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
             - rewrite Properties.map.disjoint_comm. auto.
             - rewrite H1. rewrite Properties.map.putmany_comm.
               + apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
@@ -469,10 +464,9 @@ Proof.
         }
         auto.
         * apply Properties.map.disjoint_putmany_l; split; auto.
-        pose proof Properties.map.sub_domain_disjoint.
-        apply H5 with ( m1' := m1).
+        apply Properties.map.sub_domain_disjoint with ( m1' := m1).
         {
-          rewrite Properties.map.disjoint_comm. apply H5 with (m1' := m2).
+          rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
             - rewrite Properties.map.disjoint_comm. auto.
             - rewrite H1. rewrite Properties.map.putmany_comm.
               + apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
@@ -483,17 +477,42 @@ Proof.
           apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
         }
     + rewrite <- H0. rewrite Properties.map.disjoint_comm.
-      pose proof Properties.map.sub_domain_disjoint. apply H5 with (m1' := m2).
+      apply Properties.map.sub_domain_disjoint with (m1' := m2).
       * rewrite Properties.map.disjoint_comm. auto.
       * rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
     +  rewrite <- H0. rewrite Properties.map.disjoint_comm.
-    pose proof Properties.map.sub_domain_disjoint. apply H5 with (m1' := m2).
+    apply Properties.map.sub_domain_disjoint with (m1' := m2).
     * rewrite Properties.map.disjoint_comm. auto.
     * rewrite H1. rewrite Properties.map.putmany_comm; auto. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
-  - rewrite Properties.map.
+  - rewrite Properties.map.disjoint_putmany_r; split; rewrite Properties.map.disjoint_putmany_l; split; auto.
+    + rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with ( m1' := m1).
+    {
+      rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
+        - rewrite Properties.map.disjoint_comm. auto.
+        - rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+    }
+    rewrite H0. rewrite Properties.map.putmany_comm.
+    {
+      apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+    }
+    auto.
+    + apply Properties.map.sub_domain_disjoint with ( m1' := m1).
+    {
+      rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
+        - rewrite Properties.map.disjoint_comm. auto.
+        - rewrite H1. rewrite Properties.map.putmany_comm.
+          + apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          + auto.
+    }
+    rewrite H0.
+    {
+      apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+    }
+Qed.
+
         
 
-(* Lemma alloc_seps_alt (m1 m2 m : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+ Lemma alloc_seps_alt (m m1 m2 : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
     Init.Byte.byte (@mem (@semantics Defaults64.default_parameters)))
     P1 R1 P2 R2 : Interface.map.split m m1 m2 ->
       (P1 * R1)%sep m1 -> (P2 * R2)%sep m2 ->
@@ -501,16 +520,61 @@ Proof.
 Proof.
   intros. destruct H0. destruct H0. destruct H0. destruct H2.
           destruct H1. destruct H1. destruct H1. destruct H4.
-          eexists. unfold sep. exists (Interface.map.putmany x x1).
+          exists (R_putmany x0 x2). unfold sep. exists (Interface.map.putmany x x1).
           exists (Interface.map.putmany x0 x2). split.
-            - pose proof (split_split_split m m1 x (Interface.map.putmany x0 x2) x1).
-          
-          exists m1. exists m2. split; auto. *)
+            - pose proof (split_distr m m1 m2 x x0 x1 x2). apply H6; auto.
+            - split.
+              + exists x. exists x1. split; auto. destruct H1. unfold msplit. split; auto.
+                destruct H0. apply Properties.map.sub_domain_disjoint with (m1' := m1).
+                * rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
+                  {
+                    rewrite Properties.map.disjoint_comm; auto. destruct H. auto.
+                  }
+                  rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+                * rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+              + unfold R_putmany. auto.
+Qed.
+
+Lemma alloc_seps_alt' (m m1 m2 : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters)))
+P1 P2 : Interface.map.split m m1 m2 ->
+  (exists R1, (P1 * R1)%sep m1) -> (exists R2, (P2 * R2)%sep m2) ->
+    exists (R' : Interface.map.rep -> Prop), (P1 * P2 * R')%sep m.
+Proof.
+intros. destruct H0 as [R1]. destruct H0. destruct H0. destruct H0. destruct H2.
+      destruct H1 as [R2]. destruct H1. destruct H1. destruct H1. destruct H4.
+      exists (R_putmany x0 x2). unfold sep. exists (Interface.map.putmany x x1).
+      exists (Interface.map.putmany x0 x2). split.
+        - pose proof (split_distr m m1 m2 x x0 x1 x2). apply H6; auto.
+        - split.
+          + exists x. exists x1. split; auto. destruct H1. unfold msplit. split; auto.
+            destruct H0. apply Properties.map.sub_domain_disjoint with (m1' := m1).
+            * rewrite Properties.map.disjoint_comm. apply Properties.map.sub_domain_disjoint with (m1' := m2).
+              {
+                rewrite Properties.map.disjoint_comm; auto. destruct H. auto.
+              }
+              rewrite H1. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+            * rewrite H0. apply Properties.map.sub_domain_putmany_r. apply Properties.map.sub_domain_refl.
+          + unfold R_putmany. auto.
+Qed.
 
 
 
 Require Import WordByWordMontgomery.
 Require Import coqutil.Map.Properties.
+
+Lemma Bignum_anybytes: forall m a wa, Bignum n a wa m -> anybytes a (Z.of_nat n * 8) m.
+Proof.
+  intros. pose proof (Bignum_to_bytes n a wa).
+  unfold impl1 in H0.
+  pose proof (H0 m H). unfold ex1 in H1. destruct H1.
+  pose proof (array_1_to_anybytes x m a). sepsimpl_hyps. apply H2 in H3.
+  assert (Z.of_nat n * 8 = Z.of_nat (Datatypes.length x)).
+  {
+    rewrite H1. simpl. auto.
+  }
+  rewrite H4. auto.
+Qed.
 
 Lemma anybytes_Bignum: forall m a, anybytes a (Z.of_nat n * 8) m -> exists wa, (Bignum n a wa) m.
 Proof.
@@ -525,6 +589,16 @@ Proof.
   assert (n = 6)%nat by auto. rewrite H3. apply H1. auto.
 Qed.
 
+Lemma anybytes_Bignum_alt: forall m a R, ((anybytes a (Z.of_nat n * 8)) * R)%sep m 
+  -> exists wa, (Bignum n a wa * R)%sep m.
+Proof.
+  intros. do 3 destruct H. destruct H0.
+  pose proof (anybytes_Bignum x a H0). destruct H2.
+  exists x1.
+  exists x. exists x0. split; auto.
+Qed.
+
+
 Require Import coqutil.Tactics.letexists.
 Theorem Fp2_mul_ok: program_logic_goal_for_function! Fp2_mul.
 Proof.
@@ -534,19 +608,21 @@ Proof.
   straightline. straightline.
   straightline. straightline. straightline. straightline. straightline.
   About handle_call.
+          remember ((Bignum n pxr wxr * Bignum n pxi wxi * Bignum n pyr wyr *
+          Bignum n pyi wyi * Bignum n poutr wold_outr * 
+          Bignum n pouti wold_outi)%sep) as Hm0.
+
           (*Bring into context array pointed to by pxi*)
-          pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pxi wxi) H17).
-          assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined0).
+          pose proof (alloc_seps mCombined1 mCombined0 mStack1 Hm0 H17).
+          assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep mCombined0).
             {
-              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pxi wxi) H15).
-              assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined).
+              pose proof (alloc_seps mCombined0 mCombined mStack0 Hm0 H15).
+              assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep mCombined).
                 {
-                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pxi wxi) H13).
-                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep m0).
+                  pose proof (alloc_seps mCombined m0 mStack Hm0 H13).
+                  assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep m0).
                     {
-                      exists (Bignum n pxr wxr * Bignum n pyr wyr *
-                      Bignum n pyi wyi * Bignum n poutr wold_outr * 
-                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
+                      exists (emp True). sepsimpl; auto.
                     }
                   apply H20 in H21. auto.
                 }
@@ -554,173 +630,558 @@ Proof.
             } apply H18 in H19. destruct H19.
             
             (*Bring into context array pointed to by a*)
-            apply anybytes_Bignum in H12. destruct H12.
-            pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n a x0) H17).
-            assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mCombined0).
-              { pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n a x0) H15).
-                assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mCombined).
+            Check anybytes.
+            (* apply anybytes_Bignum in H12. destruct H12.
+            apply anybytes_Bignum in H14. destruct H14.
+            apply anybytes_Bignum in H16. destruct H16. *)
+            pose proof (alloc_seps_alt' mCombined1 mCombined0 mStack1 ((anybytes a0 48) * (anybytes a 48) * Hm0)%sep (anybytes a1 48) H17).
+            assert (exists R : Interface.map.rep -> Prop, ( (anybytes a0 48) * (anybytes a 48 * Hm0) * R)%sep mCombined0).
+              { pose proof (alloc_seps_alt' mCombined0 mCombined mStack0 ((anybytes a 48) * Hm0)%sep (anybytes a0 48) H15).
+                assert (exists R : Interface.map.rep -> Prop, (anybytes a 48 * Hm0 * R)%sep mCombined).
                   {
                     apply map.split_comm in H13.
-                    pose proof (alloc_seps mCombined mStack m0 (Bignum n a x0) H13).
-                    assert (exists R : Interface.map.rep -> Prop, (Bignum n a x0 * R)%sep mStack).
+                    pose proof (alloc_seps_alt' mCombined mStack m0 (anybytes a 48) Hm0 H13).
+                    assert (exists R : Interface.map.rep -> Prop, (anybytes a 48 * R)%sep mStack).
                       {
                          exists (emp True). sepsimpl; auto.
                       }
-                    apply H22 in H23. auto.
+                    assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep m0).
+                      {
+                        exists (emp True). sepsimpl; auto.
+                      }
+                    apply H22 in H23.
+                     2: {auto. }
+                    
+                    
+                    auto.
                   }
-                  apply H21 in H22; auto.
-              }
-              apply H20 in H21.
-              destruct H21.
-
-            (*Bring into context array pointed to by pyi*)
-            pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pyi wyi) H17).
-          assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep mCombined0).
-            {
-              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pyi wyi) H15).
-              assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep mCombined).
+                assert (exists R : Interface.map.rep -> Prop, ((anybytes a0 48) * R)%sep mStack0).
                 {
-                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pyi wyi) H13).
-                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pyi wyi * R)%sep m0).
+                  exists (emp True). sepsimpl; auto.
+                }
+                apply H21 in H22; auto. destruct H22. eexists. ecancel_assumption.
+              }
+            assert (exists R : Interface.map.rep -> Prop, ((anybytes a1 48) * R)%sep mStack1).
+              {
+                exists (emp True). sepsimpl; auto.
+              }
+            
+            assert (exists R' : Interface.map.rep -> Prop,
+              (anybytes a0 48 * anybytes a 48 * Hm0 * anybytes a1 48 * R')%sep mCombined1).
+                {
+                  apply H20.
+                  - destruct H21. eexists. ecancel_assumption.
+                  - destruct H22; eexists; ecancel_assumption.
+                }
+              destruct H23.
+            (*Bring into context array pointed to by pyi*)
+            (* pose proof (alloc_seps mCombined1 mCombined0 mStack1 Hm0 H17).
+          assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep mCombined0).
+            {
+              pose proof (alloc_seps mCombined0 mCombined mStack0 Hm0 H15).
+              assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep mCombined).
+                {
+                  pose proof (alloc_seps mCombined m0 mStack Hm0 H13).
+                  assert (exists R : Interface.map.rep -> Prop, (Hm0 * R)%sep m0).
                     {
-                      exists (Bignum n pxr wxr * Bignum n pxi wxi *
-                       Bignum n pyr wyr * Bignum n poutr wold_outr * 
-                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
+                      exists (emp True ). sepsimpl; auto.
                     }
                   apply H24 in H25. auto.
                 }
               apply H23 in H24. auto.
-            } apply H22 in H23. destruct H23.
+            } apply H22 in H23. destruct H23. *)
+            rewrite HeqHm0 in H23.
+
+            (*Rephrasing seperation hypothesis to Bignum instead of anybytes.*)
+            remember ((anybytes a 48 *
+            (Bignum n pxr wxr * Bignum n pxi wxi * Bignum n pyr wyr *
+             Bignum n pyi wyi * Bignum n poutr wold_outr *
+             Bignum n pouti wold_outi) * anybytes a1 48 * x0)%sep) as Ra0.
+            assert ( (anybytes a0 48 * Ra0)%sep mCombined1).
+              {
+                 subst Ra0; ecancel_assumption.
+              }
+              pose proof (anybytes_Bignum_alt mCombined1 a0 Ra0). assert (Z.of_nat n * 8 = 48) by auto. rewrite H26 in H25.
+               apply H25 in H24. destruct H24.
+               
+                subst Ra0.
+
+               remember ((Bignum n a0 x1 *
+               (Bignum n pxr wxr * Bignum n pxi wxi * Bignum n pyr wyr *
+                Bignum n pyi wyi * Bignum n poutr wold_outr *
+                Bignum n pouti wold_outi) * anybytes a1 48 * x0)%sep) as Ra.
+               assert ((anybytes a 48 * Ra)%sep mCombined1).
+               {
+                 subst Ra; ecancel_assumption.
+               }
+               pose proof (anybytes_Bignum_alt mCombined1 a Ra). assert (Z.of_nat n * 8 = 48) by auto. rewrite H29 in H28.
+                apply H28 in H27. destruct H27.
+
+                subst Ra.
+
+                 remember ((Bignum n a0 x1 * Bignum n a x2 *
+                (Bignum n pxr wxr * Bignum n pxi wxi * Bignum n pyr wyr *
+                 Bignum n pyi wyi * Bignum n poutr wold_outr *
+                 Bignum n pouti wold_outi) * x0)%sep) as Ra1.
+                assert ( (anybytes a1 48 * Ra1)%sep mCombined1).
+                {
+                  subst Ra1; ecancel_assumption.
+                }
+                pose proof (anybytes_Bignum_alt mCombined1 a1 Ra1). assert (Z.of_nat n * 8 = 48) by auto. rewrite H32 in H31.
+                 apply H31 in H30. destruct H30.
+                subst Ra1. clear H27. clear H24.          
+
 
             straightline_call.
-            2: { eauto. }
-            3: { eauto. }
-            2: { eauto. }
+            2: { ecancel_assumption. }
+            3: { ecancel_assumption. }
+            2: { ecancel_assumption. }
+            1: { auto. }
+            repeat straightline.
+
+(* 
+            remember ((emp
+            (eval (from_mont (map word.unsigned x5)) mod m =
+             (eval (from_mont (map word.unsigned wxi)) *
+              eval (from_mont (map word.unsigned wyi))) mod m /\
+             valid (map word.unsigned x5)) * Ra)%sep) as Ra'.
+            assert ((anybytes a 48 * Ra')%sep mCombined1).
+            {
+              subst Ra; ecancel_assumption.
+            }
+            pose proof (anybytes_Bignum_alt mCombined1 a Ra). assert (Z.of_nat n * 8 = 48) by auto. rewrite H29 in H28.
+             apply H28 in H27. destruct H27. *)
+
+
+            straightline_call.
+            2: {
+              sepsimpl_hyps. subst Hm0. ecancel_assumption. 
+            }
+            2: { sepsimpl_hyps. subst Hm0. ecancel_assumption. }
+            2: { sepsimpl_hyps. subst Hm0. sepsimpl_hyps. ecancel_assumption. }
             1: { auto. }
             repeat straightline.
             straightline_call.
-            2: {
-              sepsimpl_hyps. 
-            }
+            2: {ecancel_assumption. }
+            2: { ecancel_assumption. }
+            2: { ecancel_assumption. }
+            1: { sepsimpl_hyps. auto. }
+            repeat straightline.
+            straightline_call.
+            2, 3:  ecancel_assumption.
+            2: { ecancel_assumption. }
+            1: auto.
+            repeat straightline. straightline_call.
+            2, 3, 4: ecancel_assumption.
+            1: auto.
+            repeat straightline; straightline_call.
+            2, 3, 4: ecancel_assumption.
+            1: sepsimpl_hyps; auto.
+            repeat straightline; straightline_call.
+            2, 3, 4: ecancel_assumption.
+            1: sepsimpl_hyps; auto.
+            repeat straightline. straightline_call.
+            2, 3, 4: ecancel_assumption.
+            1: sepsimpl_hyps; auto.
+            repeat straightline.
+            sepsimpl_hyps.
+            remember ((@emp
+            (@word.rep
+               (@width (@semantics Defaults64.default_parameters))
+               (@word (@semantics Defaults64.default_parameters)))
+            Init.Byte.byte
+            (@mem (@semantics Defaults64.default_parameters))
+            (and
+               (@eq Z
+                  (Z.modulo
+                     (@WordByWordMontgomery.eval
+                        (@width
+                           (@semantics Defaults64.default_parameters))
+                        (WordByWordMontgomery.n bls12prime.m
+                           (@width
+                              (@semantics Defaults64.default_parameters)))
+                        (WordByWordMontgomery.from_montgomerymod
+                           (@width
+                              (@semantics Defaults64.default_parameters))
+                           (WordByWordMontgomery.n bls12prime.m
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters)))
+                           bls12prime.m
+                           (WordByWordMontgomery.m' bls12prime.m
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters)))
+                           (@map
+                              (@word.rep
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters))
+                                 (@word
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              Z
+                              (@word.unsigned
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters))
+                                 (@word
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              x8))) bls12prime.m)
+                  (Z.modulo
+                     (Z.sub
+                        (@WordByWordMontgomery.eval
+                           (@width
+                              (@semantics Defaults64.default_parameters))
+                           (WordByWordMontgomery.n bls12prime.m
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters)))
+                           (WordByWordMontgomery.from_montgomerymod
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters))
+                              (WordByWordMontgomery.n bls12prime.m
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              bls12prime.m
+                              (WordByWordMontgomery.m' bls12prime.m
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              (@map
+                                 (@word.rep
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (@word
+                                       (@semantics
+                                          Defaults64.default_parameters)))
+                                 Z
+                                 (@word.unsigned
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (@word
+                                       (@semantics
+                                          Defaults64.default_parameters)))
+                                 x6)))
+                        (@WordByWordMontgomery.eval
+                           (@width
+                              (@semantics Defaults64.default_parameters))
+                           (WordByWordMontgomery.n bls12prime.m
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters)))
+                           (WordByWordMontgomery.from_montgomerymod
+                              (@width
+                                 (@semantics
+                                    Defaults64.default_parameters))
+                              (WordByWordMontgomery.n bls12prime.m
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              bls12prime.m
+                              (WordByWordMontgomery.m' bls12prime.m
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters)))
+                              (@map
+                                 (@word.rep
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (@word
+                                       (@semantics
+                                          Defaults64.default_parameters)))
+                                 Z
+                                 (@word.unsigned
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (@word
+                                       (@semantics
+                                          Defaults64.default_parameters)))
+                                 x7)))) bls12prime.m))
+               (WordByWordMontgomery.valid
+                  (@width (@semantics Defaults64.default_parameters))
+                  (WordByWordMontgomery.n bls12prime.m
+                     (@width (@semantics Defaults64.default_parameters)))
+                  bls12prime.m
+                  (@map
+                     (@word.rep
+                        (@width
+                           (@semantics Defaults64.default_parameters))
+                        (@word
+                           (@semantics Defaults64.default_parameters)))
+                     Z
+                     (@word.unsigned
+                        (@width
+                           (@semantics Defaults64.default_parameters))
+                        (@word
+                           (@semantics Defaults64.default_parameters)))
+                     x8))))) as emp1.
+                     remember ((@emp
+                     (@word.rep
+                        (@width (@semantics Defaults64.default_parameters))
+                        (@word (@semantics Defaults64.default_parameters)))
+                     Init.Byte.byte
+                     (@mem (@semantics Defaults64.default_parameters))
+                     (and
+                        (@eq Z
+                           (Z.modulo
+                              (@WordByWordMontgomery.eval
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters))
+                                 (WordByWordMontgomery.n bls12prime.m
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters)))
+                                 (WordByWordMontgomery.from_montgomerymod
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (WordByWordMontgomery.n bls12prime.m
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters)))
+                                    bls12prime.m
+                                    (WordByWordMontgomery.m' bls12prime.m
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters)))
+                                    (@map
+                                       (@word.rep
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters))
+                                          (@word
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       Z
+                                       (@word.unsigned
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters))
+                                          (@word
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       x7))) bls12prime.m)
+                           (Z.modulo
+                              (Z.mul
+                                 (@WordByWordMontgomery.eval
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (WordByWordMontgomery.n bls12prime.m
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters)))
+                                    (WordByWordMontgomery.from_montgomerymod
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters))
+                                       (WordByWordMontgomery.n bls12prime.m
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       bls12prime.m
+                                       (WordByWordMontgomery.m'
+                                          bls12prime.m
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       (@map
+                                          (@word.rep
+                                             (@width
+                                               (@semantics
+                                               Defaults64.default_parameters))
+                                             (@word
+                                               (@semantics
+                                               Defaults64.default_parameters)))
+                                          Z
+                                          (@word.unsigned
+                                             (@width
+                                               (@semantics
+                                               Defaults64.default_parameters))
+                                             (@word
+                                               (@semantics
+                                               Defaults64.default_parameters)))
+                                          wxi)))
+                                 (@WordByWordMontgomery.eval
+                                    (@width
+                                       (@semantics
+                                          Defaults64.default_parameters))
+                                    (WordByWordMontgomery.n bls12prime.m
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters)))
+                                    (WordByWordMontgomery.from_montgomerymod
+                                       (@width
+                                          (@semantics
+                                             Defaults64.default_parameters))
+                                       (WordByWordMontgomery.n bls12prime.m
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       bls12prime.m
+                                       (WordByWordMontgomery.m'
+                                          bls12prime.m
+                                          (@width
+                                             (@semantics
+                                               Defaults64.default_parameters)))
+                                       (@map
+                                          (@word.rep
+                                             (@width
+                                               (@semantics
+                                               Defaults64.default_parameters))
+                                             (@word
+                                               (@semantics
+                                               Defaults64.default_parameters)))
+                                          Z
+                                          (@word.unsigned
+                                             (@width
+                                               (@semantics
+                                               Defaults64.default_parameters))
+                                             (@word
+                                               (@semantics
+                                               Defaults64.default_parameters)))
+                                          wyi)))) bls12prime.m))
+                        (WordByWordMontgomery.valid
+                           (@width
+                              (@semantics Defaults64.default_parameters))
+                           (WordByWordMontgomery.n bls12prime.m
+                              (@width
+                                 (@semantics Defaults64.default_parameters)))
+                           bls12prime.m
+                           (@map
+                              (@word.rep
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters))
+                                 (@word
+                                    (@semantics
+                                       Defaults64.default_parameters))) Z
+                              (@word.unsigned
+                                 (@width
+                                    (@semantics
+                                       Defaults64.default_parameters))
+                                 (@word
+                                    (@semantics
+                                       Defaults64.default_parameters))) x7))))) as emp2.
 
-  
-  
-  
-  straightline_call. all: sepsimpl.
-    3: {  repeat straightline. pose proof (alloc_seps mCombined1 mCombined0 mStack1 (Bignum n pxi wxi) H17).
-          assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined0).
-            {
-              pose proof (alloc_seps mCombined0 mCombined mStack0 (Bignum n pxi wxi) H15).
-              assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep mCombined).
-                {
-                  pose proof (alloc_seps mCombined m0 mStack (Bignum n pxi wxi) H13).
-                  assert (exists R : Interface.map.rep -> Prop, (Bignum n pxi wxi * R)%sep m0).
-                    {
-                      Check sep_assoc. exists (Bignum n pxr wxr * Bignum n pyr wyr *
-                      Bignum n pyi wyi * Bignum n poutr wold_outr * 
-                      Bignum n pouti wold_outi)%sep. ecancel_assumption.
-                    }
-                  apply H20 in H21. auto.
-                }
-              apply H19 in H20. auto.
-            }
-          apply H18 in H19. destruct H19. 
+            remember (emp1 *
+            (Bignum n poutr x8 *
+             (emp2 *
+              (Bignum n a0 x7 *
+               (Bignum n a x6 *
+                (Bignum n pxr wxr *
+                 (Bignum n pxi wxi * (Bignum n pyr wyr * (Bignum n pyi wyi * x0)))))))) *
+           Bignum n pouti x13)%sep as Ra11.
 
-
-
-
-                      {
-                        repeat straightline. ecancel_assumption.
-                      } rewrite sep_assoc.
-                        {
-
-                        }
-                    }
-                }
-            }
-          apply H18 in H19. destruct H19. unify ?wx wxi.
-    
-    apply H18. rewrite sep_assoc in H8.
-    
-    
-    unshelve (instantiate (1:=_)).
-          - apply (R_putmany mCombined0 mStack1).
-    apply alloc_seps.
-    
-    
-    
-    unfold sep. exists mCombined0. exists mStack1. split; try auto. split.
-        - destruct H15. destruct H13. rewrite e0 in e. About Bignum. rewrite e. 
-          
-         
-     destruct H17. simpl in e. cbv [fold_right] in e. simpl in e. rewrite e.
-         dest
-    sepsimpl_hyps. ecancel_assumption. }.
-  handle_call.
-  
-  letexists.
-  split.
-    - straightline. repeat straightline. eexists.
-      + split.
-        * simpl. cbv [SortedList.lookup]. simpl.
-  
-  straightline. straightline. straightline. straightline.
-  straightline. straightline. straightline. straightline. straightline. straightline.
-    
-    
-    (*Initializing*)
-    straightline_init_with_change. 
-    repeat straightline. straightline. eexists. split.
-    - repeat straightline. eexists. split.
-       + simpl.
-    repeat straightline.
-
-    (*first function call*)
-    handle_call; [eauto ..|].
-    (*Second function call*)
-    handle_call; [eauto .. |].
-    (*remaining function calls*)
-    handle_call; [eauto .. |].
-    handle_call; [eauto .. |].
-    handle_call; [eauto .. |].
-    handle_call; [eauto .. |].
-    handle_call; [eauto .. |].
-    handle_call; [eauto .. |].
-
-    (*Prove postcondition*)
-    repeat split; auto. do 3 eexists.
-    split.
-    2: {  ecancel_assumption. }
-    split.
-      2: {split; eauto. }
-    split.
-      - eauto.
-      - split; [eauto|]. split.
-        + do 3 rewrite Prod.fst_pair. do 2 rewrite Prod.snd_pair.
-          remember (eval (from_mont (map word.unsigned wxi))) as xi.
-          remember (eval (from_mont (map word.unsigned wxr))) as xr.
-          remember (eval (from_mont (map word.unsigned wyi))) as yi.
-          remember (eval (from_mont (map word.unsigned wyr))) as yr.
-          rewrite (valid_mod H17) in H14. rewrite H14.
-          rewrite (valid_mod H15) in H12. rewrite H12.
-          rewrite (valid_mod H13) in H8. rewrite H8.
-          rewrite <- Zminus_mod. apply (f_equal (fun y => y mod m)). ring.
-        + { do 3 rewrite Prod.snd_pair. do 2 rewrite Prod.fst_pair.
-          rewrite (valid_mod H29) in H27. rewrite H27.
-          rewrite (valid_mod H26) in H24. rewrite H24.
-          rewrite (valid_mod H23) in H20. rewrite H20.
-          rewrite (valid_mod H21) in H18. rewrite H18.
-          rewrite (valid_mod H19) in H16. rewrite H16.
-          rewrite (valid_mod H17) in H14.
-          rewrite (valid_mod H15) in H12. rewrite H12.
-          rewrite (valid_mod H13) in H8. rewrite H8.  
-          remember (eval (from_mont (map word.unsigned wxi))) as xi.
-          remember (eval (from_mont (map word.unsigned wxr))) as xr.
-          remember (eval (from_mont (map word.unsigned wyi))) as yi.
-          remember (eval (from_mont (map word.unsigned wyr))) as yr.
-          rewrite <- Z.mul_mod; [| unfold m; lia].
-          rewrite <- (Zminus_mod _ (xi * yi)).
-          rewrite <- Zminus_mod. apply (f_equal (fun y => (y mod m))). ring. }
+            assert ((Bignum n a1 x9 * Ra11)%sep a11 ).
+              {
+                subst Ra11. ecancel_assumption.
+              }
+              destruct H79. destruct H79. exists x15. exists x14. split.
+              1: {
+                apply Bignum_anybytes with (wa := x9). destruct H79. destruct H80.
+                auto.
+              }
+              split.
+              1: {
+                apply Properties.map.split_comm. destruct H79. auto.
+              }
+              destruct H79. destruct H80.
+              subst Ra11.
+              remember ((emp1 *
+              (Bignum n poutr x8 *
+               (emp2 *
+                 (Bignum n a x6 *
+                  (Bignum n pxr wxr *
+                   (Bignum n pxi wxi * (Bignum n pyr wyr * (Bignum n pyi wyi * x0))))))) *
+              Bignum n pouti x13)%sep) as Rx15.
+              assert ((Bignum n a0 x7 * Rx15)%sep x15).
+              {
+                subst Rx15. ecancel_assumption.
+              }
+              destruct H82. destruct H82. destruct H82. destruct H83.
+              exists x17. exists x16. split.
+              1: {
+                apply Bignum_anybytes with (wa := x7). auto.
+              }
+              split.
+              1: {
+                apply Properties.map.split_comm. auto.
+              }
+              subst Rx15.
+              remember ((emp1 *
+              (Bignum n poutr x8 *
+               (emp2 *
+                  (Bignum n pxr wxr *
+                   (Bignum n pxi wxi * (Bignum n pyr wyr * (Bignum n pyi wyi * x0)))))) *
+              Bignum n pouti x13)%sep) as Rx17.
+              assert ((Bignum n a x6 * Rx17)%sep x17).
+              {
+                subst Rx17. ecancel_assumption.
+              }
+              destruct H85. destruct H85. destruct H85. destruct H86.
+              exists x19. exists x18. split.
+              1: {
+                apply Bignum_anybytes with (wa := x6). auto.
+              }
+              split.
+              1: {
+                apply Properties.map.split_comm. auto.
+              }
+              subst Rx17.
+              repeat straightline. split.
+               1: { reflexivity. }
+               split.
+               1: {reflexivity. }
+               eexists. eexists. eexists. split.
+               2: { ecancel_assumption. }
+               unfold Fp2_mul_Gallina_spec.
+               split; split.
+               all: sepsimpl_hyps.
+                - subst emp1. sepsimpl_hyps. auto.
+                - split.
+                  + subst emp2. subst emp1. sepsimpl_hyps. auto.
+                  + split.
+                    * subst emp1. subst emp2.
+                      sepsimpl_hyps.
+                      remember (eval (from_mont (map word.unsigned wxi))) as xi.
+                      remember (eval (from_mont (map word.unsigned wxr))) as xr.
+                      remember (eval (from_mont (map word.unsigned wyi))) as yi.
+                      remember (eval (from_mont (map word.unsigned wyr))) as yr.
+                      rewrite (valid_mod H89) in H84. rewrite H84.
+                  
+                        rewrite (valid_mod H78) in H49. rewrite H49.
+                        rewrite (valid_mod H54) in H33. rewrite H33.
+                        rewrite <- Zminus_mod. apply (f_equal (fun y => y mod m)). ring.
+                    * subst emp1. subst emp2. sepsimpl_hyps.
+                      remember (eval (from_mont (map word.unsigned wxi))) as xi.
+                      remember (eval (from_mont (map word.unsigned wxr))) as xr.
+                      remember (eval (from_mont (map word.unsigned wyi))) as yi.
+                      remember (eval (from_mont (map word.unsigned wyr))) as yr.
+                      rewrite (valid_mod H40) in H24. rewrite H24.
+                      rewrite (valid_mod H56) in H27. rewrite H27.
+                      rewrite (valid_mod H58) in H55. rewrite H55.
+                      rewrite (valid_mod H62) in H59. rewrite H59.
+                      rewrite (valid_mod H60) in H57. rewrite H57.
+                      rewrite (valid_mod H54) in H33. rewrite H33.
+                      rewrite (valid_mod H78) in H49. rewrite H49.
+                      rewrite <- Z.mul_mod; [| unfold m; lia].
+                      rewrite <- (Zminus_mod _ (xr * yr)).
+                      rewrite <- Zminus_mod. apply (f_equal (fun y => (y mod m))). ring.
+                      
+                      
+                      
+                - subst emp1; subst emp2; sepsimpl_hyps; auto.
+                - subst emp1; subst emp2. sepsimpl_hyps. auto.
 Qed.
 
 (*Printing to C*)
@@ -735,5 +1196,5 @@ Definition bls12_c_add :=
   c_module (Fp2_add :: nil).
   Definition bls12_c_Fp2_mul :=
   c_module (Fp2_mul :: nil).
-Eval compute in bls12_c_Fp2_add.
+Eval compute in bls12_c_Fp2_mul.
 
