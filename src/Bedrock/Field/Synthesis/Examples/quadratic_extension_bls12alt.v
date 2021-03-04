@@ -96,7 +96,7 @@ Local Open Scope Z_scope.
         unfold m. reflexivity.
     Qed.
 (*  We instantiate specs of all imported bedrock2 functions.
-    This needs to be done for typeclass inference to wrok properly.*)
+    This needs to be done for typeclass inference to work properly.*)
 
   Instance spec_of_reified_mul :
   spec_of (append prefix "mul") := spec_of_mul.
@@ -643,6 +643,40 @@ Ltac testac P H :=
   | _ => remember 6 as false
   end.
 
+Lemma sep_assoc_proj1 (m : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters))) P Q R : ((P * Q) * R)%sep m -> (P * (Q * R))%sep m.
+Proof.
+  apply (sep_assoc _ _ _ m).
+Qed. 
+
+Lemma sep_assoc_proj2 (m : @Interface.map.rep (@word (@semantics Defaults64.default_parameters))
+Init.Byte.byte (@mem (@semantics Defaults64.default_parameters))) P Q R : (P * (Q * R))%sep m -> (P * Q * R)%sep m.
+Proof.
+  apply (sep_assoc _ _ _ m).
+Qed. 
+
+(* Ltac normalize_seps H :=
+  match H with
+  | (_ * _ *)
+
+Ltac mytac := lazymatch goal with
+| [
+    |- exists (_ _ : @Interface.map.rep _ _ _),
+      (anybytes ?addr _ _) /\ (msplit ?mem _ _) /\ _ ] =>
+      repeat match goal with 
+      | [ H : (?Rl * ((Bignum _ addr ?aval) * ?Rr))%sep mem |- _ ] => 
+        let Ha := (fresh "Ha") in
+        let m := fresh "m" in
+        let mStack := fresh "mStack" in
+        assert (Ha : ((Bignum n addr aval) * (Rl * Rr))%sep mem) by ecancel_assumption;
+        destruct Ha as [mStack [m [? []]]];
+        exists m; exists mStack; split; [ eapply Bignum_anybytes; eassumption | split; [apply Properties.map.split_comm; auto|]]
+        (* repeat apply sep_assoc in Ha *)
+        
+      | [ H : _ mem |- _ ] => apply (sep_assoc_proj2 mem) in H
+      end
+      (* assert (Hany: exists R, ((Bignum n addr _) * R)%sep mem) by (eexists; ecancel_assumption) *)
+end.
 
 
 
@@ -651,108 +685,9 @@ Theorem Fp2_mul_ok: program_logic_goal_for_function! Fp2_mul.
 Proof.
   repeat straightline'.
   repeat (handle_call; [auto| auto| ]).
-  exists_frag.
-  Ltac get_frame_as_list l P mem :=
-    match goal with 
-      | [ _ : @sep _ _ _ ?P' ?R' mem |- _] =>
-        match P' with
-          | P =>
-            let thisFrame := (fresh "thisFrame") in remember (l ++ [R']) as thisFrame
-          | _ => remember 7 as eyyyy
-        end
-      | _ => remember 6 as false
-    end. Check R.
-  get_frame_as_list ([] : list (Interface.map.rep)) (Bignum n pouti x6) a5. Check H28. Set Printing All.
-  assert (Hnew : exists R, ((Bignum n a1 x2) * R)%sep a5).
-    - eexists.
-      pose proof (sep_comm (Bignum n a1 x2) ((Bignum n poutr x1 *
-      (Bignum n a0 x0 *
-       (Bignum n a x *
-        (Bignum n pxr wxr *
-         (Bignum n pxi wxi *
-          (Bignum n pyr wyr * (Bignum n pyi wyi * (R * (R0 * R1)))))))))%sep) a5). destruct H30.
-          
-          rewrite H30 in H28.
-    listify H28. Check seps.
-    assert (seps [Bignum n pouti x6; Bignum n a1 x2; Bignum n poutr x1; 
-    Bignum n a0 x0; Bignum n a x; Bignum n pxr wxr; Bignum n pxi wxi;
-    Bignum n pyr wyr; Bignum n pyi wyi; R; R0; R1] a5).
-      + About reify. pose proof ( bedrock2.Map.SeparationLogic.reify Tree.to_sep ( (Bignum n pouti x6 *
-      (Bignum n a1 x2 *
-       (Bignum n poutr x1 *
-        (Bignum n a0 x0 *
-         (Bignum n a x *
-          (Bignum n pxr wxr *
-           (Bignum n pxi wxi *
-            (Bignum n pyr wyr * (Bignum n pyi wyi * (R * (R0 * R1)))))))))))%sep)). simpl. auto.
-    
-    refine (Lift1Prop.subrelation_iff1_impl1 _ _ _ _ _ H28). reify_goal. ecancel_assumption. lazymatch goal with |- Lift1Prop.iff1 _ (seps ?RHS) => (remember RHS as this) end.
-    - eexists. syntactic_unify_deltavar a5 a5. refine (Lift1Prop.subrelation_iff1_impl1 _ _ _ _ _ H28).
-    cancel.
-    ecancel_assumption. 
-  destruct Hany as [R' Hany1]. destruct Hany1 as [mStack' Hany2]. destruct Hany2 as [mem' Hmem].
-  destruct Hmem as [Hmem HStack]. About ecancel_assumption. destruct H31.
-  exists x9, x8. split. - pose proof (Bignum_anybytes x8 a1 x2). apply H33. auto.
-  sepsimpl.
-
-  assert ((Bignum n a1 x9 * Ra11)%sep a11 ).
-              {
-                subst Ra11. ecancel_assumption.
-              }
-              destruct H79. destruct H79. exists x15. exists x14. split.
-              1: {
-                apply Bignum_anybytes with (wa := x9). destruct H79. destruct H80.
-                auto.
-              }
-              split.
-              1: {
-                apply Properties.map.split_comm. destruct H79. auto.
-              }
-              destruct H79. destruct H80.
-              subst Ra11.
-              remember ((emp1 *
-              (Bignum n poutr x8 *
-               (emp2 *
-                 (Bignum n a x6 *
-                  (Bignum n pxr wxr *
-                   (Bignum n pxi wxi * (Bignum n pyr wyr * (Bignum n pyi wyi * x0))))))) *
-              Bignum n pouti x13)%sep) as Rx15.
-              assert ((Bignum n a0 x7 * Rx15)%sep x15).
-              {
-                subst Rx15. ecancel_assumption.
-              }
-              destruct H82. destruct H82. destruct H82. destruct H83.
-              exists x17. exists x16. split.
-              1: {
-                apply Bignum_anybytes with (wa := x7). auto.
-              }
-              split.
-              1: {
-                apply Properties.map.split_comm. auto.
-              }
-              subst Rx15.
-              remember ((emp1 *
-              (Bignum n poutr x8 *
-               (emp2 *
-                  (Bignum n pxr wxr *
-                   (Bignum n pxi wxi * (Bignum n pyr wyr * (Bignum n pyi wyi * x0)))))) *
-              Bignum n pouti x13)%sep) as Rx17.
-              assert ((Bignum n a x6 * Rx17)%sep x17).
-              {
-                subst Rx17. ecancel_assumption.
-              }
-              destruct H85. destruct H85. destruct H85. destruct H86.
-              exists x19. exists x18. split.
-              1: {
-                apply Bignum_anybytes with (wa := x6). auto.
-              }
-              split.
-              1: {
-                apply Properties.map.split_comm. auto.
-              }
-              subst Rx17.
-              repeat straightline.
-              
+  repeat mytac.
+  repeat straightline.
+  
               split.
                1: { reflexivity. }
                split.
@@ -762,13 +697,11 @@ Proof.
                unfold Fp2_mul_Gallina_spec.
                split; split.
                all: sepsimpl_hyps.
-                - subst emp1. sepsimpl_hyps. auto.
+                - auto.
                 - split.
-                  + subst emp2. subst emp1. sepsimpl_hyps. auto.
+                  + auto.
                   + split.
-                    * subst emp1. subst emp2.
-                      sepsimpl_hyps.
-                      remember (eval (from_mont (map word.unsigned wxi))) as xi.
+                    * remember (eval (from_mont (map word.unsigned wxi))) as xi.
                       remember (eval (from_mont (map word.unsigned wxr))) as xr.
                       remember (eval (from_mont (map word.unsigned wyi))) as yi.
                       remember (eval (from_mont (map word.unsigned wyr))) as yr.
